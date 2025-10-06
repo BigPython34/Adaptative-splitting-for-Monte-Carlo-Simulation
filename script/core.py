@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
-"""
-Fonctions mathématiques de base pour l'analyse SMC.
-"""
+"""Fonctions mathématiques de base pour l'analyse SMC."""
+
 import numpy as np
 from typing import Tuple, Optional, List
 
+try:  # Support package and standalone execution
+    from .config import CORE_CONSTANTS
+except ImportError:  # pragma: no cover - fallback when run as script
+    from config import CORE_CONSTANTS
+
 
 def phi(x: np.ndarray) -> np.ndarray:
-    """
-    Transformation phi(x) = -x.
-
-    Args:
-        x: Array d'entrée
-
-    Returns:
-        Transformation appliquée à x
-    """
-    return -x
+    """Transformation phi(x) = coeff * x, avec coefficient configurable."""
+    return CORE_CONSTANTS["phi_multiplier"] * x
 
 
 def mcmc_kernel(
@@ -44,10 +40,14 @@ def mcmc_kernel(
     trace = [] if return_trace else None
 
     for _ in range(n_steps):
-        proposal = x_current + np.random.normal(0, sigma)
+        proposal = x_current + np.random.normal(
+            CORE_CONSTANTS["mcmc_proposal_mean"], sigma
+        )
 
         if proposal <= -L_current:
-            log_ratio = -0.5 * (proposal**2 - x_current**2)
+            log_ratio = CORE_CONSTANTS["log_ratio_coefficient"] * (
+                proposal**2 - x_current**2
+            )
             alpha = np.exp(log_ratio)
 
             if np.random.rand() < alpha:
@@ -57,7 +57,9 @@ def mcmc_kernel(
         if return_trace:
             trace.append(x_current)
 
-    acceptance_rate = accepts / n_steps if n_steps > 0 else 0.0
+    acceptance_rate = (
+        accepts / n_steps if n_steps > 0 else CORE_CONSTANTS["acceptance_default"]
+    )
 
     if return_trace:
         return x_current, acceptance_rate, trace

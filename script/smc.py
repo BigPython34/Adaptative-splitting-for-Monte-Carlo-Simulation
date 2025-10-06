@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""
-Algorithme SMC adaptatif.
-"""
+"""Algorithme SMC adaptatif."""
+
 import numpy as np
-from typing import Tuple, List, Optional
+from typing import List, Optional
 import time
-import concurrent.futures
-import multiprocessing
-from core import phi, mcmc_kernel
+
+try:  # Support package and standalone execution
+    from .core import phi, mcmc_kernel
+    from .config import SMC_CONSTANTS, SMC_MESSAGES
+except ImportError:  # pragma: no cover - fallback when run as script
+    from core import phi, mcmc_kernel
+    from config import SMC_CONSTANTS, SMC_MESSAGES
 
 
 class AdaptiveSMCResult:
@@ -69,7 +72,7 @@ def adaptive_smc_run(
         AdaptiveSMCResult si succès, None sinon
     """
     particles = np.random.randn(N)
-    prob_est = 1.0
+    prob_est = SMC_CONSTANTS["initial_prob_estimate"]
     thresholds = []
     acc_rates = []
     particle_means = []
@@ -78,13 +81,16 @@ def adaptive_smc_run(
     n_iter = 0
 
     if verbose:
-        print(">>> Début du SMC adaptatif...")
+        print(SMC_MESSAGES["start"])
 
     while n_iter < max_iter:
         phi_vals = phi(particles)
 
         # Détermination du seuil adaptatif via le quantile (1-p0)
-        L_current = np.percentile(phi_vals, (1 - p0) * 100)
+        L_current = np.percentile(
+            phi_vals,
+            (1.0 - p0) * SMC_CONSTANTS["percentile_scale"],
+        )
         thresholds.append(L_current)
         n_iter += 1
 
@@ -93,7 +99,7 @@ def adaptive_smc_run(
 
         if L_current >= L_target:
             if verbose:
-                print("    Seuil cible atteint.")
+                print(SMC_MESSAGES["threshold_reached"])
             break
 
         prob_est *= p0
@@ -101,7 +107,7 @@ def adaptive_smc_run(
 
         if survivors.size == 0:
             if verbose:
-                print("    Aucune particule survivante à l'itération", n_iter)
+                print(SMC_MESSAGES["no_survivor"].format(iteration=n_iter))
             return None
 
         # Diagnostics sur les particules survivantes
@@ -149,12 +155,10 @@ def adaptive_smc_run(
     )
 
 
-def run_naive_mc_time(
-    L_target: float, time_budget: float = 60.0, batch_size: int = 10**5
-):
+def run_naive_mc_time(L_target: float, time_budget: float, batch_size: int) -> float:
     """
-    Exécute la simulation MC naïf pendant 'time_budget' secondes.
-    Retourne : (probabilité estimée, nb total d'échantillons, nb de succès, temps écoulé)
+    Exécute la simulation MC naïf pendant ``time_budget`` secondes.
+    Retourne la probabilité estimée.
     """
     total_samples = 0
     total_success = 0
@@ -164,7 +168,11 @@ def run_naive_mc_time(
         successes = np.sum(samples <= -L_target)
         total_success += successes
         total_samples += batch_size
-    estimated_prob = total_success / total_samples if total_samples > 0 else 0.0
+    estimated_prob = (
+        total_success / total_samples
+    if total_samples > 0
+    else 0.0
+    )
     return float(estimated_prob)
 
 
@@ -174,7 +182,7 @@ def run_naive_mc_iterations(L_target: float, iter: int):
     Retourne : (probabilité estimée, nb total d'échantillons, nb de succès, temps écoulé)
     """
     successes = 0
-    for i in range(iter):
+    for _ in range(iter):
         result = np.random.randn()
         if result <= -L_target:
             successes += 1

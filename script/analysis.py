@@ -5,8 +5,20 @@ Fonctions d'analyse pour l'étude des hyperparamètres du SMC adaptatif.
 import concurrent.futures
 from typing import Dict, Tuple
 
-from config import DEFAULT_ANALYSIS_PARAMS, DEFAULT_MCMC_PARAMS
-from smc import adaptive_smc_run, AdaptiveSMCResult
+try:  # Support package and standalone execution
+    from .config import (
+        DEFAULT_ANALYSIS_PARAMS,
+        DEFAULT_MCMC_PARAMS,
+        ANALYSIS_MESSAGES,
+    )
+    from .smc import adaptive_smc_run, AdaptiveSMCResult
+except ImportError:  # pragma: no cover - fallback when run as script
+    from config import (
+        DEFAULT_ANALYSIS_PARAMS,
+        DEFAULT_MCMC_PARAMS,
+        ANALYSIS_MESSAGES,
+    )
+    from smc import adaptive_smc_run, AdaptiveSMCResult
 
 
 def run_single_combination(params: Tuple) -> Tuple:
@@ -64,7 +76,7 @@ def analyze_hyperparameters(
     if max_iter is not None:
         params["max_iter"] = max_iter
 
-    print(">>> Début de l'analyse des hyperparamètres...")
+    print(ANALYSIS_MESSAGES["hyperparam_start"])
 
     results = {}
 
@@ -100,12 +112,18 @@ def analyze_hyperparameters(
                 if result is not None:
                     results[key] = result.to_dict()
                 else:
-                    print(f"Échec pour {key}: aucun résultat")
+                    print(
+                        ANALYSIS_MESSAGES["combination_failure"].format(key=key)
+                    )
 
             except Exception as exc:
-                print(f"{key} a généré une exception: {exc}")
+                print(
+                    ANALYSIS_MESSAGES["combination_exception"].format(
+                        key=key, error=exc
+                    )
+                )
 
-    print(">>> Analyse des hyperparamètres terminée.")
+    print(ANALYSIS_MESSAGES["hyperparam_end"])
     return results
 
 
@@ -144,10 +162,14 @@ def analyze_single_mcmc_run(
         params["max_iter"] = max_iter
 
     if verbose:
-        print(">>> Début de l'analyse spécifique du MCMC...")
+        print(ANALYSIS_MESSAGES["single_start"])
         print(
-            f"    Paramètres : p0={params['p0']}, sigma={params['sigma']}, "
-            f"n_mcmc={params['n_mcmc']}, L_target={params['L_target']}"
+            ANALYSIS_MESSAGES["single_params"].format(
+                p0=params["p0"],
+                sigma=params["sigma"],
+                n_mcmc=params["n_mcmc"],
+                L_target=params["L_target"],
+            )
         )
 
     result = adaptive_smc_run(
@@ -161,19 +183,25 @@ def analyze_single_mcmc_run(
     )
 
     if result is None:
-        print("    Le SMC n'a pas réussi à atteindre le seuil cible.")
+        print(ANALYSIS_MESSAGES["smc_failure"])
         raise RuntimeError("SMC failed to reach target threshold")
     else:
         if result.thresholds[-1] >= params["L_target"]:
             if verbose:
                 print(
-                    f"    Succès : Seuil cible atteint à L_target = {params['L_target']}."
+                    ANALYSIS_MESSAGES["single_success"].format(
+                        L_target=params["L_target"]
+                    )
                 )
         else:
             if verbose:
-                print(f"    Échec : Seuil final atteint = {result.thresholds[-1]:.3f}.")
+                print(
+                    ANALYSIS_MESSAGES["single_failure"].format(
+                        threshold=result.thresholds[-1]
+                    )
+                )
 
     if verbose:
-        print(">>> Analyse spécifique du MCMC terminée.")
+        print(ANALYSIS_MESSAGES["single_end"])
 
     return result
