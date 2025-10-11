@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Fonctions de traçage pour l'analyse des résultats des simulations SMC.
-Ce module est autonome et reçoit sa configuration via les arguments des fonctions.
+Plotting functions for SMC simulation results analysis.
 """
 from typing import Dict, List
 import matplotlib.pyplot as plt
@@ -10,7 +9,7 @@ from scipy.stats import norm
 from pathlib import Path
 
 def save_figure(fig, filename: str, config: dict) -> None:
-    """Sauvegarde une figure en appliquant les réglages de la configuration."""
+    """Saves figure with configuration settings."""
     figures_dir = config["paths"]["figures_dir"]
     dpi = config["plots"]["dpi"]
     
@@ -20,7 +19,7 @@ def save_figure(fig, filename: str, config: dict) -> None:
     plt.close(fig)
 
 def plot_methods_graph_all(sim_data: Dict[str, List[float]], config: dict) -> None:
-    """Trace les erreurs relatives pour chaque méthode."""
+    """Plots relative errors for each method."""
     plots_cfg = config["plots"]
     labels_cfg = config["labels"]
     
@@ -58,7 +57,7 @@ def plot_thresholds_on_gaussian(
     fixed_thresholds: np.ndarray,
     config: dict,
 ) -> None:
-    """Superpose les seuils adaptatifs et fixes sur la densité gaussienne."""
+    """Overlays adaptive and fixed thresholds on Gaussian density."""
     plots_cfg = config["plots"]
     labels_cfg = config["labels"]
     

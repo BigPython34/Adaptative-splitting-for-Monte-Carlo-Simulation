@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Fonctions mathématiques de base pour l'analyse SMC."""
+"""Core mathematical functions for SMC analysis."""
 
 import numpy as np
 from typing import Tuple, Optional, List
 
-try:  # Support package and standalone execution
+try:
     from .config import CORE_CONSTANTS
-except ImportError:  # pragma: no cover - fallback when run as script
+except ImportError:
     from script.smc.config import CORE_CONSTANTS
 
 
 def phi(x: np.ndarray) -> np.ndarray:
-    """Transformation phi(x) = coeff * x, avec coefficient configurable."""
+    """Score function phi(x) = -x for rare event simulation."""
     return CORE_CONSTANTS["phi_multiplier"] * x
 
 
@@ -19,21 +19,17 @@ def mcmc_kernel(
     x: float, L_current: float, n_steps: int, sigma: float, return_trace: bool = False
 ) -> Tuple[float, float, Optional[List[float]]]:
     """
-    Effectue n_steps du kernel Metropolis-Hastings pour échantillonner la loi N(0,1)
-    tronquée à x <= -L_current.
+    Metropolis-Hastings kernel to sample from N(0,1) truncated at x <= -L_current.
 
     Args:
-        x: Valeur initiale de la particule
-        L_current: Seuil courant (contrainte x <= -L_current)
-        n_steps: Nombre d'étapes MCMC
-        sigma: Écart-type pour les propositions
-        return_trace: Si True, retourne la trace complète
+        x: Initial particle value
+        L_current: Current threshold (constraint x <= -L_current)
+        n_steps: Number of MCMC steps
+        sigma: Standard deviation for proposals
+        return_trace: If True, returns full trace
 
     Returns:
-        Tuple contenant:
-        - x_final: Valeur finale de la particule
-        - acceptance_rate: Taux d'acceptation
-        - trace: Liste des valeurs (si return_trace=True), sinon None
+        Tuple of (final_x, acceptance_rate, trace)
     """
     x_current = x
     accepts = 0

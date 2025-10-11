@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """
-Implémentation des algorithmes de Monte-Carlo Séquentiel (SMC) et naïf.
+Sequential Monte Carlo (SMC) algorithms implementation.
 
-Ce module contient les implémentations pures des algorithmes, sans dépendances
-externes à la configuration ou à l'affichage.
+This module contains pure algorithm implementations for:
+- Adaptive SMC (Algorithm 2 from article)
+- Fixed-level SMC (Algorithm 1 from article)
+- Naive Monte Carlo
 """
 import time
 from typing import List, Optional, Tuple, Dict
 import numpy as np
 
-# Ces imports sont corrects car ils définissent le problème mathématique
 from .core import phi, mcmc_kernel
-
-# --- Classes de Résultats ---
 
 class AdaptiveSMCResult:
     """Classe pour stocker les résultats d'une exécution SMC adaptative."""
@@ -40,7 +39,7 @@ class AdaptiveSMCResult:
         # ... (inchangé)
 
 class FixedSMCResult:
-    """Classe pour stocker les résultats d'une exécution SMC à seuils fixes."""
+    """Stores results from a fixed-level SMC execution."""
     def __init__(
         self,
         prob_est: float,
@@ -51,31 +50,28 @@ class FixedSMCResult:
         self.thresholds = thresholds
         self.acc_rates = acc_rates
 
-# --- Algorithmes SMC ---
 
 def adaptive_smc_run(
     N: int,
     p0: float,
-    phi_function: callable, # On passe la fonction phi
-    initial_sampler: callable, # On passe un générateur de particules
+    phi_function: callable,
+    initial_sampler: callable,
     L_target: float,
     n_mcmc: int,
     sigma: float,
     max_iter: int = 50,
 ) -> Optional[AdaptiveSMCResult]:
-    """Exécute l'algorithme SMC adaptatif (Algorithme 2 de l'article)."""
+    """Executes adaptive SMC algorithm (Algorithm 2 from article)."""
     
     particles = initial_sampler(N) 
     prob_est = 1.0
     
-    # Listes pour les diagnostics
     thresholds, acc_rates, particle_means, particle_vars, mcmc_traces = [], [], [], [], []
     n_iter = 0
 
     while n_iter < max_iter:
         phi_vals = phi(particles)
         
-        # Le seuil est le quantile (1-p0) des scores
         L_current = np.percentile(phi_vals, (1.0 - p0) * 100.0)
         thresholds.append(L_current)
         n_iter += 1
@@ -87,22 +83,20 @@ def adaptive_smc_run(
         survivors = particles[phi_vals >= L_current]
 
         if survivors.size == 0:
-            return None  # Échec, pas de survivants
+            return None
 
         particle_means.append(np.mean(survivors))
         particle_vars.append(np.var(survivors))
         
-        # Rééchantillonnage
         indices = np.random.choice(len(survivors), size=N, replace=True)
         particles = survivors[indices]
         
-        # Étape de Mutation (MCMC)
         new_particles = np.empty(N)
         acc_list = np.empty(N)
         mcmc_trace_iter = None
 
         for i in range(N):
-            trace_this_particle = (i == 0) # On ne trace que la première particule
+            trace_this_particle = (i == 0)
             x_new, acc, trace = mcmc_kernel(
                 particles[i], L_current, n_mcmc, sigma, return_trace=trace_this_particle
             )
@@ -115,7 +109,6 @@ def adaptive_smc_run(
         acc_rates.append(np.mean(acc_list))
         mcmc_traces.append(mcmc_trace_iter)
 
-    # Estimation finale
     r_final = np.mean(phi(particles) >= L_target)
     prob_est *= r_final
 
@@ -130,13 +123,14 @@ def adaptive_smc_run(
         particle_vars=particle_vars,
     )
 
+
 def fixed_smc_run(
     N: int,
     thresholds: np.ndarray,
     n_mcmc: int,
     sigma: float,
 ) -> Optional[FixedSMCResult]:
-    """Exécute l'algorithme SMC à seuils fixes (Algorithme 1 de l'article)."""
+    """Executes fixed-level SMC algorithm (Algorithm 1 from article)."""
     
     particles = np.random.randn(N)
     prob_est = 1.0
@@ -147,7 +141,7 @@ def fixed_smc_run(
         survivors = particles[phi_vals >= l_k]
         
         if survivors.size == 0:
-            return None # Échec
+            return None
 
         prob_est *= survivors.size / particles.size
         

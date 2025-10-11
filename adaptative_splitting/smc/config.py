@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configuration centralisée pour les scripts SMC et comparaisons."""
+"""Centralized configuration for SMC scripts and comparisons."""
 
 from pathlib import Path
 from typing import Dict
