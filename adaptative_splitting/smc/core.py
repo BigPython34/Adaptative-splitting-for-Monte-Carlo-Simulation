@@ -7,7 +7,7 @@ from typing import Tuple, Optional, List
 try:  # Support package and standalone execution
     from .config import CORE_CONSTANTS
 except ImportError:  # pragma: no cover - fallback when run as script
-    from config import CORE_CONSTANTS
+    from script.smc.config import CORE_CONSTANTS
 
 
 def phi(x: np.ndarray) -> np.ndarray:

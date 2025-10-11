@@ -5,7 +5,6 @@ Implémentation des algorithmes de Monte-Carlo Séquentiel (SMC) et naïf.
 Ce module contient les implémentations pures des algorithmes, sans dépendances
 externes à la configuration ou à l'affichage.
 """
-
 import time
 from typing import List, Optional, Tuple, Dict
 import numpy as np
@@ -57,6 +56,8 @@ class FixedSMCResult:
 def adaptive_smc_run(
     N: int,
     p0: float,
+    phi_function: callable, # On passe la fonction phi
+    initial_sampler: callable, # On passe un générateur de particules
     L_target: float,
     n_mcmc: int,
     sigma: float,
@@ -64,8 +65,8 @@ def adaptive_smc_run(
 ) -> Optional[AdaptiveSMCResult]:
     """Exécute l'algorithme SMC adaptatif (Algorithme 2 de l'article)."""
     
-    particles = np.random.randn(N)
-    prob_est = 1.0  # Initialisation directe
+    particles = initial_sampler(N) 
+    prob_est = 1.0
     
     # Listes pour les diagnostics
     thresholds, acc_rates, particle_means, particle_vars, mcmc_traces = [], [], [], [], []
@@ -121,6 +122,7 @@ def adaptive_smc_run(
     return AdaptiveSMCResult(
         prob_est=prob_est,
         thresholds=thresholds,
+        final_particles=particles,
         acc_rates=acc_rates,
         mcmc_traces=mcmc_traces,
         n_iter=n_iter,

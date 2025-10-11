@@ -16,7 +16,6 @@ from smc.config import DEFAULT_MCMC_PARAMS, MAIN_MESSAGES, COMPARISON_CONFIG
 from smc.smc_algorithms import adaptive_smc_run, fixed_smc_run, run_naive_mc
 
 # Constante pour estimer la performance du MC naïf
-# (à ajuster en fonction de votre machine si nécessaire)
 NAIVE_SAMPLES_PER_SECOND = 10_000_000
 
 def main():

@@ -1,4 +1,5 @@
 # finance_lib/pricing_engine.py
+
 import numpy as np
 from typing import Dict
 from .models import BaseShortRateModel
@@ -6,7 +7,6 @@ from .models import BaseShortRateModel
 class MonteCarloDerivativesPricer:
     """
     Moteur de pricing pour dérivés sur taux d'intérêt par Monte Carlo.
-    Prend un modèle de taux court en entrée et peut pricer différents produits.
     """
     def __init__(self, model: BaseShortRateModel):
         self.model = model
@@ -17,6 +17,9 @@ class MonteCarloDerivativesPricer:
         """
         Prix d'une option call européenne sur le taux court à maturité T.
         Payoff = max(r(T) - K, 0).
+        
+        CORRECTION : Cette fonction retourne maintenant un dictionnaire complet
+        incluant le prix, l'erreur standard, et l'intervalle de confiance.
         """
         paths = self.model.simulate_euler(T, n_steps, n_sims)
         
@@ -29,10 +32,18 @@ class MonteCarloDerivativesPricer:
         integrated_rates = np.sum(paths[:, :-1], axis=1) * dt
         discount_factors = np.exp(-integrated_rates)
 
-        # Prix et statistiques
+        # L'estimateur Monte Carlo est le tableau des payoffs actualisés
         discounted_payoffs = discount_factors * payoffs
+        
+        # Calcul du prix (la moyenne)
         price = np.mean(discounted_payoffs)
-        std_error = np.std(discounted_payoffs) / np.sqrt(n_sims)
+        
+        # Calcul de l'écart-type des estimateurs individuels
+        std_dev = np.std(discounted_payoffs)
+        
+        # Calcul de l'erreur standard de la moyenne
+        std_error = std_dev / np.sqrt(n_sims)
+        # ------------------------
 
         return {
             "price": price,
@@ -43,20 +54,11 @@ class MonteCarloDerivativesPricer:
     def price_range_accrual_note(
         self, T: float, r_min: float, r_max: float, notional: float, n_observations: int, n_sims: int
     ) -> float:
-        """
-        Prix d'une 'Range Accrual Note'.
-        Le payoff est proportionnel au temps passé dans un intervalle [r_min, r_max].
-        """
-        # n_steps doit être égal à n_observations pour cette structure
         paths = self.model.simulate_euler(T, n_observations, n_sims)
-        
-        observed_paths = paths[:, 1:] # Exclure t=0
-        
+        observed_paths = paths[:, 1:]
         in_range_counts = np.sum((observed_paths >= r_min) & (observed_paths <= r_max), axis=1)
         payoffs = notional * (in_range_counts / n_observations)
-        
         dt = T / n_observations
         discount_factors = np.exp(-np.sum(paths[:, :-1] * dt, axis=1))
-        
         price = np.mean(payoffs * discount_factors)
         return price
