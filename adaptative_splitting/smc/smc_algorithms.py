@@ -1,192 +1,165 @@
-#!/usr/bin/env python3
-"""
-Sequential Monte Carlo (SMC) algorithms implementation.
+# smc_algorithms.py
 
-This module contains pure algorithm implementations for:
-- Adaptive SMC (Algorithm 2 from article)
-- Fixed-level SMC (Algorithm 1 from article)
-- Naive Monte Carlo
-"""
-import time
-from typing import List, Optional, Tuple, Dict
 import numpy as np
+from typing import Callable, Optional, List
 
-from .core import phi, mcmc_kernel
-
+# --- Classe de Résultat Générique ---
 class AdaptiveSMCResult:
-    """Classe pour stocker les résultats d'une exécution SMC adaptative."""
-    def __init__(
-        self,
-        prob_est: float,
-        thresholds: List[float],
-        acc_rates: List[float],
-        mcmc_traces: List[Optional[List[float]]],
-        n_iter: int,
-        # On peut garder des diagnostics si on le souhaite
-        particle_means: List[float],
-        particle_vars: List[float],
-    ):
+    """Résultats génériques d'une exécution SMC."""
+    def __init__(self, prob_est: float, thresholds: List[float], final_particles: np.ndarray, final_scores: np.ndarray):
         self.prob_est = prob_est
         self.thresholds = thresholds
-        self.acc_rates = acc_rates
-        self.mcmc_traces = mcmc_traces
-        self.n_iter = n_iter
-        self.particle_means = particle_means
-        self.particle_vars = particle_vars
-
-    def to_dict(self) -> Dict:
-        """Convertit le résultat en dictionnaire."""
-        # ... (inchangé)
-
+        self.final_particles = final_particles
+        self.final_scores = final_scores
+        
 class FixedSMCResult:
-    """Stores results from a fixed-level SMC execution."""
-    def __init__(
-        self,
-        prob_est: float,
-        thresholds: np.ndarray,
-        acc_rates: List[float],
-    ):
+    """Résultats pour le SMC à niveaux fixes."""
+    def __init__(self, prob_est: float):
         self.prob_est = prob_est
-        self.thresholds = thresholds
-        self.acc_rates = acc_rates
-
-
-def adaptive_smc_run(
-    N: int,
-    p0: float,
-    phi_function: callable,
-    initial_sampler: callable,
-    L_target: float,
-    n_mcmc: int,
-    sigma: float,
-    max_iter: int = 50,
-) -> Optional[AdaptiveSMCResult]:
-    """Executes adaptive SMC algorithm (Algorithm 2 from article)."""
-    
-    particles = initial_sampler(N) 
-    prob_est = 1.0
-    
-    thresholds, acc_rates, particle_means, particle_vars, mcmc_traces = [], [], [], [], []
-    n_iter = 0
-
-    while n_iter < max_iter:
-        phi_vals = phi(particles)
-        
-        L_current = np.percentile(phi_vals, (1.0 - p0) * 100.0)
-        thresholds.append(L_current)
-        n_iter += 1
-
-        if L_current >= L_target:
-            break
-
-        prob_est *= p0
-        survivors = particles[phi_vals >= L_current]
-
-        if survivors.size == 0:
-            return None
-
-        particle_means.append(np.mean(survivors))
-        particle_vars.append(np.var(survivors))
-        
-        indices = np.random.choice(len(survivors), size=N, replace=True)
-        particles = survivors[indices]
-        
-        new_particles = np.empty(N)
-        acc_list = np.empty(N)
-        mcmc_trace_iter = None
-
-        for i in range(N):
-            trace_this_particle = (i == 0)
-            x_new, acc, trace = mcmc_kernel(
-                particles[i], L_current, n_mcmc, sigma, return_trace=trace_this_particle
-            )
-            new_particles[i] = x_new
-            acc_list[i] = acc
-            if trace_this_particle:
-                mcmc_trace_iter = trace
-        
-        particles = new_particles
-        acc_rates.append(np.mean(acc_list))
-        mcmc_traces.append(mcmc_trace_iter)
-
-    r_final = np.mean(phi(particles) >= L_target)
-    prob_est *= r_final
-
-    return AdaptiveSMCResult(
-        prob_est=prob_est,
-        thresholds=thresholds,
-        final_particles=particles,
-        acc_rates=acc_rates,
-        mcmc_traces=mcmc_traces,
-        n_iter=n_iter,
-        particle_means=particle_means,
-        particle_vars=particle_vars,
-    )
-
 
 def fixed_smc_run(
     N: int,
     thresholds: np.ndarray,
+    phi_function: Callable,
+    initial_sampler: Callable,
+    mcmc_kernel_func: Callable,
     n_mcmc: int,
-    sigma: float,
+    sigma: float
 ) -> Optional[FixedSMCResult]:
-    """Executes fixed-level SMC algorithm (Algorithm 1 from article)."""
-    
-    particles = np.random.randn(N)
+    """Exécute l'algorithme SMC à niveaux fixes (générique)."""
+    particles = initial_sampler(N)
     prob_est = 1.0
-    acc_rates: List[float] = []
 
     for l_k in thresholds:
-        phi_vals = phi(particles)
-        survivors = particles[phi_vals >= l_k]
+        scores = phi_function(particles)
+        survivors_mask = scores >= l_k
+        num_survivors = np.sum(survivors_mask)
         
-        if survivors.size == 0:
-            return None
+        if num_survivors == 0: return None
 
-        prob_est *= survivors.size / particles.size
+        prob_est *= num_survivors / N
+        survivors = particles[survivors_mask]
         
         indices = np.random.choice(len(survivors), size=N, replace=True)
         particles = survivors[indices]
         
         new_particles = np.empty(N)
-        acc_list = np.empty(N)
-
         for i in range(N):
-            x_new, acc, _ = mcmc_kernel(particles[i], l_k, n_mcmc, sigma)
+            x_new, _, _ = mcmc_kernel_func(particles[i], l_k, n_mcmc, sigma)
             new_particles[i] = x_new
-            acc_list[i] = acc
-            
         particles = new_particles
-        acc_rates.append(np.mean(acc_list))
-    
-    # L'estimation finale est déjà calculée car le dernier seuil est L_target
-    return FixedSMCResult(
-        prob_est=prob_est,
-        thresholds=thresholds,
-        acc_rates=acc_rates,
-    )
-
-# --- Algorithme Naïf ---
+        
+    return FixedSMCResult(prob_est)
 
 def run_naive_mc(
     L_target: float,
+    phi_function: Callable,
+    initial_sampler: Callable,
     num_samples: int,
     batch_size: int = 10**6
 ) -> float:
-    """
-    Exécute une simulation Monte-Carlo naïve de manière efficace par lots.
-    """
-    if num_samples == 0:
-        return 0.0
-        
-    total_success = 0
-    remaining_samples = num_samples
+    """Exécute une simulation Monte-Carlo naïve (générique)."""
+    if num_samples == 0: return 0.0
     
-    while remaining_samples > 0:
-        current_batch_size = min(remaining_samples, batch_size)
-        samples = np.random.randn(current_batch_size)
-        # Note: phi(x) = -x, donc phi(x) > L est équivalent à x < -L
-        total_success += np.sum(samples < -L_target)
-        remaining_samples -= current_batch_size
+    total_success = 0
+    remaining = num_samples
+    while remaining > 0:
+        batch = min(remaining, batch_size)
+        samples = initial_sampler(batch)
+        scores = phi_function(samples)
+        total_success += np.sum(scores >= L_target)
+        remaining -= batch
         
     return total_success / num_samples
+
+# --- L'ALGORITHME SMC GÉNÉRIQUE FINAL ---
+def adaptive_smc_run(
+    N: int,
+    p0: float,
+    phi_function: Callable,
+    initial_sampler: Callable,
+    propagation_step: Callable, # L'étape de propagation est maintenant un argument !
+    L_target: Optional[float] = None,
+    max_iter: int = 100
+) -> Optional[AdaptiveSMCResult]:
+    """
+    Exécute l'algorithme SMC adaptatif générique et final.
+    """
+    particles = initial_sampler(N)
+    prob_est = 1.0
+    thresholds = []
+
+    for k in range(max_iter):
+        scores = phi_function(particles)
+        valid_scores = scores[~np.isnan(scores)]
+        if len(valid_scores) == 0: return None
+
+        L_current = np.percentile(valid_scores, (1 - p0) * 100)
+        
+        if L_target is not None and L_current >= L_target:
+            print(f"Cible L_target={L_target:.2f} atteinte.")
+            break
+        
+        if k > 0 and L_current <= thresholds[-1] + 1e-6:
+            print(f"Convergence des seuils à l'itération {k}.")
+            break
+            
+        thresholds.append(L_current)
+        
+        survivors_mask = (scores >= L_current) & (~np.isnan(scores))
+        num_survivors = np.sum(survivors_mask)
+        if num_survivors < 2: break
+        
+        prob_est *= num_survivors / len(valid_scores)
+        survivors = particles[survivors_mask]
+        
+        # Rééchantillonnage
+        indices = np.random.choice(len(survivors), size=N, replace=True)
+        resampled_particles = survivors[indices]
+        
+        # Étape de PROPAGATION (maintenant entièrement personnalisable)
+        particles = propagation_step(resampled_particles, survivors, L_current)
+
+    final_scores = phi_function(particles)
+    
+    # Calcul de la probabilité finale si une cible est définie
+    if L_target is not None:
+        final_survival_rate = np.mean(final_scores >= L_target)
+        final_probability = prob_est * final_survival_rate
+    else:
+        final_probability = prob_est
+
+    return AdaptiveSMCResult(final_probability, thresholds, particles, final_scores)
+
+
+# --- Usines à Stratégies de Propagation ---
+
+def create_mcmc_propagation_step(mcmc_kernel_func: Callable, n_mcmc: int, sigma: float) -> Callable:
+    """Crée une fonction de propagation basée sur un noyau MCMC (pour le cas simple)."""
+    def propagation_step(resampled_particles, survivors, L_current):
+        N = len(resampled_particles)
+        new_particles = np.empty(N)
+        for i in range(N):
+            x_new, _, _ = mcmc_kernel_func(resampled_particles[i], L_current, n_mcmc, sigma)
+            new_particles[i] = x_new
+        return new_particles
+    return propagation_step
+
+def create_rejuvenation_propagation_step(initial_sampler: Callable, rejuvenation_ratio: float, mutation_std_ratio: float) -> Callable:
+    """Crée une fonction de propagation basée sur la régénération (pour le cas risque)."""
+    def propagation_step(resampled_particles, survivors, L_current):
+        N = len(resampled_particles)
+        particles = resampled_particles.copy()
+        
+        num_rejuvenate = int(N * rejuvenation_ratio)
+        if num_rejuvenate > 0:
+            particles[:num_rejuvenate] = initial_sampler(num_rejuvenate)
+        
+        num_mutate = N - num_rejuvenate
+        if num_mutate > 0:
+            mutation_std = np.std(survivors) * mutation_std_ratio
+            if mutation_std > 1e-9:
+                start_index = num_rejuvenate
+                particles[start_index:] += np.random.normal(0, mutation_std, size=num_mutate)
+        return particles
+    return propagation_step
